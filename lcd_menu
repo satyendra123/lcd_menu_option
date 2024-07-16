@@ -1,0 +1,216 @@
+# using micropython
+from machine import Pin, I2C
+import time
+import json
+from lcd_api import LcdApi
+from i2c_lcd import I2cLcd
+
+# I2C configurations (adjust if needed)
+I2C_ADDR = 0x3F
+I2C_SCL = 22
+I2C_SDA = 21
+
+# Initialize I2C and LCD
+i2c = I2C(1, scl=Pin(I2C_SCL), sda=Pin(I2C_SDA), freq=400000)
+lcd = I2cLcd(i2c, I2C_ADDR, 2, 16)  # 2 rows and 16 columns
+
+# Initialize buttons
+option_button = Pin(0, Pin.IN, Pin.PULL_UP)
+up_button = Pin(1, Pin.IN, Pin.PULL_UP)
+down_button = Pin(2, Pin.IN, Pin.PULL_UP)
+ok_button = Pin(3, Pin.IN, Pin.PULL_UP)
+
+# Dictionary data
+lcd_input = [
+    {'total_sensor': 1},
+    {'zone_id': 1},
+    {'total_engaged': 1},
+    {'total_disengaged': 1}
+]
+
+current_index = 0
+current_key = list(lcd_input[current_index].keys())[0]
+current_value = lcd_input[current_index][current_key]
+
+# File path for storing preferences
+PREFERENCES_FILE = 'preferences.json'
+
+# Function to display current item
+def display_current_item():
+    lcd.clear()
+    lcd.putstr(f"{current_key}: {current_value}")
+
+# Function to save preferences to file
+def save_preferences():
+    with open(PREFERENCES_FILE, 'w') as f:
+        json.dump(lcd_input, f)
+
+# Function to display all values on exit
+def display_all_values():
+    lcd.clear()
+    lcd.putstr(f"Zone:{lcd_input[1]['zone_id']} TS:{lcd_input[0]['total_sensor']}")
+    lcd.putstr(f" TE:{lcd_input[2]['total_engaged']} TD:{lcd_input[3]['total_disengaged']}")
+
+# Main loop
+while True:
+    display_current_item()
+
+    if option_button.value() == 0:  # Option button pressed
+        time.sleep(0.2)  # Debounce delay
+        current_index = (current_index + 1) % len(lcd_input)
+        current_key = list(lcd_input[current_index].keys())[0]
+        current_value = lcd_input[current_index][current_key]
+        display_current_item()
+
+    if up_button.value() == 0:  # Up button pressed
+        time.sleep(0.2)  # Debounce delay
+        current_value += 1
+        lcd_input[current_index][current_key] = current_value
+        display_current_item()
+
+    if down_button.value() == 0:  # Down button pressed
+        time.sleep(0.2)  # Debounce delay
+        current_value -= 1
+        lcd_input[current_index][current_key] = current_value
+        display_current_item()
+
+    if ok_button.value() == 0:  # OK button pressed
+        time.sleep(0.2)  # Debounce delay
+        save_preferences()
+        current_index = (current_index + 1) % len(lcd_input)
+        if current_index == 0:  # Exit if we've gone through all items
+            break
+        current_key = list(lcd_input[current_index].keys())[0]
+        current_value = lcd_input[current_index][current_key]
+        display_current_item()
+
+# Display all values on exit
+display_all_values()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+2) using arduino
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <EEPROM.h>
+
+// Initialize the I2C LCD (change the address to 0x27 if needed)
+LiquidCrystal_I2C lcd(0x3F, 16, 2);
+
+// Button pins
+const int optionButtonPin = 6;
+const int upButtonPin = 7;
+const int downButtonPin = 8;
+const int okButtonPin = 9;
+
+// Data array
+int lcd_input[4] = {1, 1, 1, 1};
+const char* labels[4] = {"total_sensor", "zone_id", "total_engaged", "total_disengaged"};
+
+int current_index = 0;
+int current_value = lcd_input[current_index];
+
+// Debounce time
+unsigned long lastDebounceTime = 0;
+unsigned long debounceDelay = 50;
+
+// Function to display the current item
+void displayCurrentItem() {
+  lcd.clear();
+  lcd.print(labels[current_index]);
+  lcd.setCursor(0, 1);
+  lcd.print(current_value);
+}
+
+// Function to save preferences to EEPROM
+void savePreferences() {
+  for (int i = 0; i < 4; i++) {
+    EEPROM.write(i, lcd_input[i]);
+  }
+}
+
+// Setup function
+void setup() {
+  // Initialize the LCD
+  lcd.begin();
+  lcd.backlight();
+  
+  // Initialize buttons
+  pinMode(optionButtonPin, INPUT_PULLUP);
+  pinMode(upButtonPin, INPUT_PULLUP);
+  pinMode(downButtonPin, INPUT_PULLUP);
+  pinMode(okButtonPin, INPUT_PULLUP);
+
+  // Read saved values from EEPROM
+  for (int i = 0; i < 4; i++) {
+    lcd_input[i] = EEPROM.read(i);
+  }
+
+  current_value = lcd_input[current_index];
+  displayCurrentItem();
+}
+
+// Main loop
+void loop() {
+  // Read button states
+  int optionState = digitalRead(optionButtonPin);
+  int upState = digitalRead(upButtonPin);
+  int downState = digitalRead(downButtonPin);
+  int okState = digitalRead(okButtonPin);
+
+  if (optionState == LOW && (millis() - lastDebounceTime) > debounceDelay) {
+    lastDebounceTime = millis();
+    current_index = (current_index + 1) % 4;
+    current_value = lcd_input[current_index];
+    displayCurrentItem();
+  }
+
+  if (upState == LOW && (millis() - lastDebounceTime) > debounceDelay) {
+    lastDebounceTime = millis();
+    current_value++;
+    lcd_input[current_index] = current_value;
+    displayCurrentItem();
+  }
+
+  if (downState == LOW && (millis() - lastDebounceTime) > debounceDelay) {
+    lastDebounceTime = millis();
+    current_value--;
+    lcd_input[current_index] = current_value;
+    displayCurrentItem();
+  }
+
+  if (okState == LOW && (millis() - lastDebounceTime) > debounceDelay) {
+    lastDebounceTime = millis();
+    savePreferences();
+    current_index = (current_index + 1) % 4;
+    if (current_index == 0) {
+      lcd.clear();
+      lcd.print("Exiting...");
+      delay(2000);
+      lcd.noBacklight();
+      while (true);
+    }
+    current_value = lcd_input[current_index];
+    displayCurrentItem();
+  }
+}
